@@ -1,0 +1,14 @@
+# `files` in package.json is the allowlist; this is a second line of defence.
+src/
+tests/
+examples/
+.github/
+coverage/
+*.tsbuildinfo
+tsconfig*.json
+vitest.config.ts
+eslint.config.js
+.prettierrc.json
+.prettierignore
+.env
+.env.*

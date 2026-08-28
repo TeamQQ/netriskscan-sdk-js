@@ -1,0 +1,78 @@
+{
+  "name": "@netriskscan/sdk",
+  "version": "0.1.0",
+  "description": "Official JavaScript / TypeScript SDK for the NetRiskScan Developer API - IP risk scoring and network intelligence.",
+  "keywords": [
+    "netriskscan",
+    "ip",
+    "ip-risk",
+    "ip-reputation",
+    "ip-intelligence",
+    "network-intelligence",
+    "threat-intelligence",
+    "vpn-detection",
+    "proxy-detection",
+    "tor-detection",
+    "sdk",
+    "typescript"
+  ],
+  "homepage": "https://github.com/TeamQQ/netriskscan-sdk-js#readme",
+  "bugs": "https://github.com/TeamQQ/netriskscan-sdk-js/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TeamQQ/netriskscan-sdk-js.git"
+  },
+  "license": "MIT",
+  "author": "NetRiskScan",
+  "private": false,
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "node --input-type=commonjs -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prebuild": "npm run clean",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.1",
+    "@types/node": "^20.14.15",
+    "eslint": "^9.9.1",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.3.0",
+    "vitest": "^2.0.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
