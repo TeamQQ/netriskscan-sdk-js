@@ -40,6 +40,13 @@ interface ParsedErrorBody {
   code?: NetRiskScanErrorCode | undefined;
   message?: string | undefined;
   requestId?: string | undefined;
+  /**
+   * The website envelope's `traceId`, kept separate from {@link requestId}.
+   *
+   * It is an ASP.NET `TraceIdentifier` (`0HN7GK4J2P8QR:00000001`), not the `req_…` ID support asks
+   * for, so it must rank *below* the `X-Request-Id` header rather than shadowing it.
+   */
+  traceId?: string | undefined;
 }
 
 /** The outcome of one attempt: either a value to return, or a signal to retry after a backoff. */
@@ -68,7 +75,8 @@ function parseErrorBody(payload: unknown): ParsedErrorBody {
   return {
     code: asString(payload["code"]),
     message: asString(payload["message"]),
-    requestId: asString(payload["requestId"]) ?? asString(payload["traceId"]),
+    requestId: asString(payload["requestId"]),
+    traceId: asString(payload["traceId"]),
   };
 }
 
@@ -91,7 +99,12 @@ function buildHttpError(
   body: ParsedErrorBody,
   retryAfter: number | undefined,
 ): NetRiskScanError {
-  const requestId = body.requestId ?? response.headers.get("x-request-id") ?? undefined;
+  // The edge gateway stamps `X-Request-Id` on every response and forces the same value on the origin,
+  // so the header is the ID NetRiskScan support can actually trace. It outranks the website envelope's
+  // `traceId`, which only appears on the origin limiter's non-standard `429` and is a different
+  // identifier entirely.
+  const requestId =
+    body.requestId ?? response.headers.get("x-request-id") ?? body.traceId ?? undefined;
   const message = body.message ?? `NetRiskScan API request failed with status ${response.status}.`;
   const shared = { status: response.status, code: body.code, requestId };
 

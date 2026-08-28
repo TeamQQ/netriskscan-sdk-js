@@ -87,7 +87,7 @@ describe("HTTP status mapping", () => {
         success: false,
         code: "CLIENT_RATE_LIMITED",
         message: "Too many requests from your network.",
-        traceId: "req_tracefallback",
+        traceId: "0HN7GK4J2P8QR:00000001",
       },
     });
     const error = await client(stub.fetch)
@@ -95,7 +95,41 @@ describe("HTTP status mapping", () => {
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(NetRiskScanRateLimitError);
-    expect(error).toMatchObject({ code: "CLIENT_RATE_LIMITED", requestId: "req_tracefallback" });
+    expect(error).toMatchObject({ code: "CLIENT_RATE_LIMITED" });
+  });
+
+  it("prefers the gateway's X-Request-Id over the envelope's ASP.NET traceId", async () => {
+    // The global limiter sends an ASP.NET TraceIdentifier, which is not the `req_` ID support traces
+    // by. The edge gateway's header is, so it must win.
+    const stub = stubFetch({
+      status: 429,
+      body: { success: false, code: "CLIENT_RATE_LIMITED", traceId: "0HN7GK4J2P8QR:00000001" },
+      headers: { "x-request-id": "req_gateway00000001" },
+    });
+    await expect(client(stub.fetch).getUsage()).rejects.toMatchObject({
+      requestId: "req_gateway00000001",
+    });
+  });
+
+  it("falls back to traceId only when no header is present", async () => {
+    const stub = stubFetch({
+      status: 429,
+      body: { success: false, code: "CLIENT_RATE_LIMITED", traceId: "0HN7GK4J2P8QR:00000001" },
+    });
+    await expect(client(stub.fetch).getUsage()).rejects.toMatchObject({
+      requestId: "0HN7GK4J2P8QR:00000001",
+    });
+  });
+
+  it("still lets the documented envelope's requestId win over the header", async () => {
+    const stub = stubFetch({
+      status: 403,
+      body: errorBody("scope_not_allowed", "denied", "req_frombody000001"),
+      headers: { "x-request-id": "req_fromheader00001" },
+    });
+    await expect(client(stub.fetch).getUsage()).rejects.toMatchObject({
+      requestId: "req_frombody000001",
+    });
   });
 });
 
