@@ -74,6 +74,27 @@ of any Node-only assumption, so the same code runs in a Worker or a browser buil
 Each key carries scopes: `ip-risk:read` for `checkIp()`, `usage:read` for `getUsage()`. A key missing
 the scope gets a `403`, surfaced as `NetRiskScanAuthenticationError`.
 
+### Anonymous access (no API key)
+
+`apiKey` is optional. Omit it entirely and `checkIp()` still works, on an anonymous tier capped at
+**30 requests/day per source IP**:
+
+```ts
+const client = new NetRiskScanClient({}); // no apiKey
+
+const result = await client.checkIp("8.8.8.8");
+console.log(result.usage); // { mode: "anonymous", dailyLimit: 30, used: 1, remaining: 29, resetAt: "…" }
+```
+
+Good for a quick trial or a CLI default; not a substitute for a key in anything you ship; `getUsage()`
+always needs one, since there is no account to report usage for. Calling it anonymously throws
+`NetRiskScanValidationError` locally, before any request is sent - read the `usage` field on
+`checkIp()`'s result instead, or `getResponseMeta()`'s `rateLimit`, which the API populates from the
+same `X-RateLimit-*` headers either way.
+
+Once the daily limit is hit, `checkIp()` throws `NetRiskScanRateLimitError` same as an authenticated
+`429` would, with a reminder appended to `error.message` pointing at the developer console.
+
 ## Check an IP
 
 ```ts

@@ -26,6 +26,29 @@ const DEFAULT_MAX_RETRY_DELAY_MS = 10_000;
 /** Concurrent requests {@link NetRiskScanClient.checkMany} runs, chosen to sit under the smallest plan. */
 const DEFAULT_CONCURRENCY = 5;
 
+/** `checkIp()` calls per day the anonymous tier allows, with no `apiKey` configured. */
+const ANONYMOUS_DAILY_LIMIT = 30;
+
+/**
+ * Validates an optional `apiKey`.
+ *
+ * `undefined` is a deliberate choice - the anonymous tier - and passes through unchanged. Anything
+ * else must be a non-blank string, so a caller who *meant* to authenticate (an unset environment
+ * variable resolving to `""`, for instance) gets a clear configuration error instead of silently
+ * falling back to anonymous.
+ */
+function normalizeApiKey(apiKey: string | undefined): string | undefined {
+  if (apiKey === undefined) return undefined;
+  if (typeof apiKey !== "string" || apiKey.trim() === "") {
+    throw new NetRiskScanConfigurationError(
+      "`apiKey` must be a non-empty string, or omitted entirely to use the API's anonymous tier " +
+        `(${ANONYMOUS_DAILY_LIMIT} checkIp() calls/day, no getUsage() access). Create a key in the ` +
+        "developer console for a higher limit: https://netriskscan.com",
+    );
+  }
+  return apiKey.trim();
+}
+
 /**
  * Runs `worker` over `items` with at most `concurrency` in flight, preserving input order.
  *
@@ -69,6 +92,15 @@ async function runPool<T, R>(
  *
  * console.log(result.risk.index, result.risk.band);
  * ```
+ *
+ * `apiKey` may be omitted to use the anonymous tier instead - 30 `checkIp()` calls/day, no
+ * `getUsage()`:
+ *
+ * ```ts
+ * const client = new NetRiskScanClient({});
+ * const result = await client.checkIp("8.8.8.8");
+ * console.log(result.usage); // { mode: "anonymous", dailyLimit: 30, remaining: 29, ... }
+ * ```
  */
 export class NetRiskScanClient {
   readonly #context: RequestContext;
@@ -76,13 +108,8 @@ export class NetRiskScanClient {
   /** Base URL this client sends to, with any trailing slash removed. */
   readonly baseUrl: string;
 
-  constructor(options: NetRiskScanClientOptions) {
-    if (typeof options?.apiKey !== "string" || options.apiKey.trim() === "") {
-      throw new NetRiskScanConfigurationError(
-        "A NetRiskScan API key is required. Create one in the developer console and pass it as " +
-          "`new NetRiskScanClient({ apiKey })`.",
-      );
-    }
+  constructor(options: NetRiskScanClientOptions = {}) {
+    const apiKey = normalizeApiKey(options.apiKey);
 
     const fetchImpl = options.fetch ?? globalThis.fetch;
     if (typeof fetchImpl !== "function") {
@@ -95,7 +122,7 @@ export class NetRiskScanClient {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
 
     this.#context = {
-      apiKey: options.apiKey.trim(),
+      apiKey,
       baseUrl: this.baseUrl,
       timeoutMs: positive(options.timeoutMs, DEFAULT_TIMEOUT_MS, "timeoutMs"),
       retries: nonNegative(options.retries, DEFAULT_RETRIES, "retries"),
@@ -147,8 +174,19 @@ export class NetRiskScanClient {
    *
    * Every `/v1/*` response also carries a live snapshot in its headers, reachable with
    * {@link getResponseMeta} - so watching headroom does not require polling this endpoint.
+   *
+   * @throws {NetRiskScanValidationError} if the client has no `apiKey` configured. There is no
+   * account to report usage for on the anonymous tier - read `checkIp()`'s own `usage` field, or
+   * {@link getResponseMeta}, instead.
    */
   async getUsage(options: RequestOptions = {}): Promise<UsageResult> {
+    if (this.#context.apiKey === undefined) {
+      throw new NetRiskScanValidationError(
+        "getUsage() requires an API key - the anonymous tier has no account to report usage for. " +
+          "Read the `usage` field on checkIp()'s result, or getResponseMeta(), instead.",
+      );
+    }
+
     return performRequest<UsageResult>(this.#context, "GET", "/v1/usage", options);
   }
 

@@ -3,21 +3,32 @@ import {
   NetRiskScanClient,
   NetRiskScanConfigurationError,
   NetRiskScanNetworkError,
+  NetRiskScanRateLimitError,
   NetRiskScanValidationError,
   getResponseMeta,
 } from "../src/index.js";
-import { IP_RISK_BODY, TEST_API_KEY, USAGE_BODY, stubFetch } from "./helpers.js";
+import {
+  ANONYMOUS_IP_RISK_BODY,
+  IP_RISK_BODY,
+  TEST_API_KEY,
+  USAGE_BODY,
+  errorBody,
+  stubFetch,
+} from "./helpers.js";
 
 function client(fetch: ReturnType<typeof stubFetch>["fetch"], options = {}) {
   return new NetRiskScanClient({ apiKey: TEST_API_KEY, fetch, retries: 0, ...options });
 }
 
 describe("NetRiskScanClient construction", () => {
-  it("rejects a missing or blank API key before any request is made", () => {
-    for (const apiKey of [undefined, "", "   "]) {
-      expect(() => new NetRiskScanClient({ apiKey: apiKey as string })).toThrow(
-        NetRiskScanConfigurationError,
-      );
+  it("allows apiKey to be omitted entirely, for the anonymous tier", () => {
+    expect(() => new NetRiskScanClient()).not.toThrow();
+    expect(() => new NetRiskScanClient({})).not.toThrow();
+  });
+
+  it("rejects a blank (but present) API key before any request is made", () => {
+    for (const apiKey of ["", "   "]) {
+      expect(() => new NetRiskScanClient({ apiKey })).toThrow(NetRiskScanConfigurationError);
     }
   });
 
@@ -146,6 +157,75 @@ describe("checkIp", () => {
   it("reports a malformed JSON body as a network error, not a successful parse", async () => {
     const stub = stubFetch({ rawBody: "<html>gateway</html>" });
     await expect(client(stub.fetch).checkIp("8.8.8.8")).rejects.toThrow(NetRiskScanNetworkError);
+  });
+});
+
+describe("anonymous tier (no apiKey)", () => {
+  it("sends no Authorization header at all", async () => {
+    const stub = stubFetch({ body: ANONYMOUS_IP_RISK_BODY });
+    await new NetRiskScanClient({ fetch: stub.fetch, retries: 0 }).checkIp("8.8.8.8");
+
+    expect(stub.calls[0]?.headers.has("authorization")).toBe(false);
+  });
+
+  it("surfaces the server's anonymous usage block on the result", async () => {
+    const stub = stubFetch({ body: ANONYMOUS_IP_RISK_BODY });
+    const result = await new NetRiskScanClient({ fetch: stub.fetch, retries: 0 }).checkIp(
+      "8.8.8.8",
+    );
+
+    expect(result.usage).toEqual({
+      mode: "anonymous",
+      dailyLimit: 30,
+      used: 1,
+      remaining: 29,
+      resetAt: "2026-09-01T00:00:00Z",
+    });
+  });
+
+  it("does not add a usage block when the server didn't send one", async () => {
+    const stub = stubFetch({ body: IP_RISK_BODY });
+    const result = await new NetRiskScanClient({ fetch: stub.fetch, retries: 0 }).checkIp(
+      "8.8.8.8",
+    );
+
+    expect(result.usage).toBeUndefined();
+  });
+
+  it("rejects getUsage() locally, without spending a request", async () => {
+    const stub = stubFetch({ body: USAGE_BODY });
+    await expect(
+      new NetRiskScanClient({ fetch: stub.fetch, retries: 0 }).getUsage(),
+    ).rejects.toThrow(NetRiskScanValidationError);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  it("adds a registration hint to a 429 hit with no apiKey configured", async () => {
+    const stub = stubFetch({
+      status: 429,
+      body: errorBody("rate_limit_exceeded", "API rate limit exceeded."),
+      headers: { "retry-after": "60" },
+    });
+    await expect(
+      new NetRiskScanClient({ fetch: stub.fetch, retries: 0 }).checkIp("8.8.8.8"),
+    ).rejects.toMatchObject({
+      name: "NetRiskScanRateLimitError",
+      message: expect.stringContaining("Create a free API key"),
+    });
+  });
+
+  it("does not add the registration hint when an apiKey is configured", async () => {
+    const stub = stubFetch({
+      status: 429,
+      body: errorBody("quota_exceeded", "Billing-period quota exhausted."),
+      headers: { "retry-after": "60" },
+    });
+    const error = await client(stub.fetch)
+      .checkIp("8.8.8.8")
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(NetRiskScanRateLimitError);
+    expect((error as Error).message).not.toContain("Create a free API key");
   });
 });
 

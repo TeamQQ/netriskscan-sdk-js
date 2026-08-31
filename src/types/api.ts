@@ -17,10 +17,15 @@ export interface NetRiskScanClientOptions {
    * Sent as `Authorization: Bearer <apiKey>`. It is never placed in a URL, and never appears in an
    * error message or stack - see the Security section of the README before using this in a browser.
    *
+   * **Optional.** Omit it entirely to use the API's anonymous tier - `checkIp()` still works, capped
+   * at 30 requests/day per source IP and scoped to `ip-risk:read` only (`getUsage()` always needs a
+   * key, since there is no account to report usage for). Each anonymous `checkIp()` result carries its
+   * own `usage` block reporting that daily counter - see {@link import("./risk.js").IpRiskResult.usage}.
+   *
    * The SDK does **not** read `process.env` for you: pass the key explicitly so the client works
    * unchanged in browsers, Workers, and Deno.
    */
-  apiKey: string;
+  apiKey?: string;
   /** Base URL of the API. Defaults to `https://api.netriskscan.com`. Trailing slashes are trimmed. */
   baseUrl?: string;
   /**

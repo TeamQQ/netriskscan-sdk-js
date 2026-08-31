@@ -43,6 +43,7 @@ export type {
 } from "./types/api.js";
 
 export type {
+  AnonymousUsage,
   AssessmentGrade,
   ConnectionType,
   DetectionFlag,
@@ -54,6 +55,7 @@ export type {
   NetworkType,
   OpenEnum,
   RiskBand,
+  UsageMode,
 } from "./types/risk.js";
 
 export type { UsagePeriod, UsageRateLimit, UsageResult, UsageUnits } from "./types/usage.js";

@@ -19,7 +19,8 @@ import { computeBackoffMs, isRetryableMethod, isRetryableStatus } from "./retry.
 
 /** Everything the request core needs, resolved once by the client. */
 export interface RequestContext {
-  apiKey: string;
+  /** `undefined` means the anonymous tier - no `Authorization` header is sent. */
+  apiKey: string | undefined;
   baseUrl: string;
   timeoutMs: number;
   retries: number;
@@ -94,10 +95,19 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
 }
 
+/**
+ * Appended to a `429` message when the request that hit it had no `apiKey` - the anonymous tier's
+ * own daily counter, not the account rate limit or quota an authenticated caller would see.
+ */
+const ANONYMOUS_LIMIT_HINT =
+  " This request had no apiKey, so it was billed against the anonymous tier's 30-requests/day " +
+  "limit. Create a free API key at https://netriskscan.com for a higher limit.";
+
 function buildHttpError(
   response: Response,
   body: ParsedErrorBody,
   retryAfter: number | undefined,
+  isAnonymous: boolean,
 ): NetRiskScanError {
   // The edge gateway stamps `X-Request-Id` on every response and forces the same value on the origin,
   // so the header is the ID NetRiskScan support can actually trace. It outranks the website envelope's
@@ -113,7 +123,7 @@ function buildHttpError(
   }
 
   if (response.status === 429) {
-    return new NetRiskScanRateLimitError(message, {
+    return new NetRiskScanRateLimitError(isAnonymous ? message + ANONYMOUS_LIMIT_HINT : message, {
       ...shared,
       retryAfter,
       rateLimit: parseRateLimit(response.headers),
@@ -181,7 +191,8 @@ async function runAttempt<T>(
       response = await context.fetch(url, {
         method,
         headers: {
-          Authorization: `Bearer ${context.apiKey}`,
+          // Omitted entirely (not sent as `Bearer undefined`) on the anonymous tier.
+          ...(context.apiKey === undefined ? {} : { Authorization: `Bearer ${context.apiKey}` }),
           Accept: "application/json",
           // Browsers forbid setting this and drop it silently; that is not an error anywhere.
           "User-Agent": context.userAgent,
@@ -232,7 +243,7 @@ async function runAttempt<T>(
       }
     }
 
-    throw buildHttpError(response, body, retryAfter);
+    throw buildHttpError(response, body, retryAfter, context.apiKey === undefined);
   } finally {
     linked.dispose();
   }

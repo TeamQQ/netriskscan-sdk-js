@@ -6,6 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the version is `0.x`, minor
 releases may contain breaking changes.
 
+## [Unreleased]
+
+### Added
+
+- Anonymous access: `apiKey` is now optional on `NetRiskScanClient`. Omitting it uses the Developer
+  API's anonymous tier (30 `checkIp()` calls/day per source IP, `ip-risk:read` only) instead of
+  throwing `NetRiskScanConfigurationError`.
+- `IpRiskResult.usage` (`AnonymousUsage`, `UsageMode`) - the anonymous tier's own daily counter,
+  present on `checkIp()` results made with no `apiKey`.
+- A `429` hit with no `apiKey` configured now appends a registration hint to
+  `NetRiskScanRateLimitError.message`, pointing at the developer console.
+
+### Changed
+
+- `getUsage()` now throws `NetRiskScanValidationError` locally (no request sent) when called with no
+  `apiKey` - there is no account to report usage for on the anonymous tier.
+
 ## [0.1.0] - 2026-08-28
 
 Initial release.

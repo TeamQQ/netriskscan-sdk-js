@@ -71,6 +71,18 @@ export const IP_RISK_BODY = {
   flags: { proxy: false, vpn: false, tor: false, datacenter: true, scanner: null, abuse: false },
 } as const;
 
+/** A representative anonymous-tier `GET /v1/ip-risk/{ip}` payload - `IP_RISK_BODY` plus `usage`. */
+export const ANONYMOUS_IP_RISK_BODY = {
+  ...IP_RISK_BODY,
+  usage: {
+    mode: "anonymous",
+    dailyLimit: 30,
+    used: 1,
+    remaining: 29,
+    resetAt: "2026-09-01T00:00:00Z",
+  },
+} as const;
+
 /** A representative `GET /v1/usage` payload, matching the server's `PublicApiUsageResponseV1`. */
 export const USAGE_BODY = {
   plan: "growth",

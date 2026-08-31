@@ -147,6 +147,29 @@ export interface IpFlags {
   abuse: DetectionFlag;
 }
 
+/** How a request was authenticated. Open vocabulary - render the string, do not hard-code a whitelist. */
+export type UsageMode = OpenEnum<"anonymous" | "authenticated">;
+
+/**
+ * The anonymous tier's own daily counter, reported on a {@link IpRiskResult} in place of the
+ * account-level usage an `apiKey` would otherwise give access to via
+ * {@link import("../client.js").NetRiskScanClient.getUsage}.
+ *
+ * Observed on requests made with no `apiKey` configured; not observed on authenticated ones, which
+ * is why {@link IpRiskResult.usage} is optional rather than always present.
+ */
+export interface AnonymousUsage {
+  mode: UsageMode;
+  /** `checkIp()` calls the anonymous tier allows per day, per source IP. */
+  dailyLimit: number;
+  /** Calls already spent today. */
+  used: number;
+  /** Calls left today. */
+  remaining: number;
+  /** ISO 8601 timestamp of the next daily reset. */
+  resetAt: string;
+}
+
 /** Result of {@link import("../client.js").NetRiskScanClient.checkIp}. */
 export interface IpRiskResult {
   /**
@@ -158,4 +181,10 @@ export interface IpRiskResult {
   risk: IpRisk;
   network: IpNetwork;
   flags: IpFlags;
+  /**
+   * The anonymous tier's daily counter. Present when this call had no `apiKey`; omitted on an
+   * authenticated call, where {@link import("../client.js").NetRiskScanClient.getUsage} is the source
+   * of truth for usage instead.
+   */
+  usage?: AnonymousUsage;
 }
