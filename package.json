@@ -50,7 +50,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "node --input-type=commonjs -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
-    "prebuild": "npm run clean",
+    "prebuild": "npm run clean && npm run sync-version",
+    "sync-version": "node scripts/sync-version.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

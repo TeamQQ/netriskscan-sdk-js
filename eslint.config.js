@@ -31,6 +31,12 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
+    // Build helpers run directly in Node and are intentionally outside the TypeScript project.
+    files: ["scripts/**/*.mjs"],
+    ...tseslint.configs.disableTypeChecked,
+    rules: { ...tseslint.configs.disableTypeChecked.rules, "no-console": "off" },
+  },
+  {
     files: ["tests/**/*.ts"],
     rules: { "@typescript-eslint/no-unsafe-assignment": "off" },
   },
