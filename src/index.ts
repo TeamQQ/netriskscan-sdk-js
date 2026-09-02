@@ -48,6 +48,7 @@ export type {
   ConnectionType,
   DetectionFlag,
   IpFlags,
+  IpLocation,
   IpNetwork,
   IpRisk,
   IpRiskResult,
@@ -56,6 +57,10 @@ export type {
   OpenEnum,
   ProxyType,
   RiskBand,
+  RiskReason,
+  RiskReasonCategory,
+  RiskReasonCode,
+  RiskReasonSeverity,
   UsageMode,
 } from "./types/risk.js";
 

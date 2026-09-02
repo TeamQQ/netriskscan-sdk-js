@@ -10,6 +10,18 @@ releases may contain breaking changes.
 
 ### Added
 
+- `IpRiskResult.location` (`IpLocation`) - network-level GeoIP intelligence for the queried address:
+  country, region, city, and time zone. Optional and nullable to stay backward-compatible with API
+  servers that do not yet publish it - `undefined` means the server hasn't shipped the field,
+  `null` means it has nothing to report for this address.
+- `IpRisk.reasons` (`RiskReason[]`) - stable, server-generated explanations for the assessment, each
+  with a `code`, `category`, and `severity`. Optional for the same backward-compatibility reason as
+  `location`.
+- `RiskReasonCode`, `RiskReasonCategory`, and `RiskReasonSeverity` - open vocabularies (see
+  `OpenEnum`) so a reason code the server introduces after this release still type-checks and renders
+  without an SDK upgrade.
+- Documentation and examples for `location` and `risk.reasons`, including guidance that a reason is
+  descriptive evidence, not a fraud verdict.
 - Anonymous access: `apiKey` is now optional on `NetRiskScanClient`. Omitting it uses the Developer
   API's anonymous tier (30 `checkIp()` calls/day per source IP, `ip-risk:read` only) instead of
   throwing `NetRiskScanConfigurationError`.

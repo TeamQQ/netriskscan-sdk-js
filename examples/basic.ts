@@ -38,5 +38,15 @@ console.log("  abuse      ", render(result.flags.abuse));
 console.log("  searchBot  ", render(result.flags.searchCrawler));
 console.log("  crawlerName", result.flags.searchCrawlerName ?? "n/a");
 
+// Network-level GeoIP - not a device's GPS location. `undefined` on older API servers, `null` when
+// the address can't be located, an object (with possibly-null fields) otherwise.
+console.log("location:   ", result.location?.country ?? "n/a", result.location?.city ?? "");
+
+// Server-generated explanations for the assessment - not a fraud verdict. `undefined` on older API
+// servers. Always keep a default case: the reason vocabulary is intentionally extensible.
+for (const reason of result.risk.reasons ?? []) {
+  console.log("  reason:    ", reason.code, `[${reason.category}/${reason.severity}]`);
+}
+
 console.log("requestId:  ", result.requestId);
 console.log("quota left: ", getResponseMeta(result)?.quota.remaining ?? "n/a");

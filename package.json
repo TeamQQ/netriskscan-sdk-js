@@ -13,6 +13,9 @@
     "vpn-detection",
     "proxy-detection",
     "tor-detection",
+    "geoip",
+    "ip-geolocation",
+    "risk-reasons",
     "sdk",
     "typescript"
   ],

@@ -11,6 +11,7 @@ import {
   ANONYMOUS_IP_RISK_BODY,
   GOOGLEBOT_BODY,
   IP_RISK_BODY,
+  LEGACY_IP_RISK_BODY,
   RESIDENTIAL_PROXY_BODY,
   TEST_API_KEY,
   USAGE_BODY,
@@ -365,8 +366,137 @@ describe("response metadata", () => {
     });
     const result = await client(stub.fetch).checkIp("8.8.8.8");
 
-    expect(Object.keys(result)).toEqual(["requestId", "risk", "network", "flags"]);
+    expect(Object.keys(result)).toEqual(["requestId", "risk", "network", "location", "flags"]);
     expect(JSON.parse(JSON.stringify(result))).toEqual(IP_RISK_BODY);
     expect(getResponseMeta(result)?.rateLimit.limit).toBe(120);
+  });
+});
+
+describe("P0: location and risk reasons", () => {
+  it("passes through location and risk.reasons unchanged", async () => {
+    const stub = stubFetch({ body: IP_RISK_BODY });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+
+    expect(result.location).toEqual({
+      countryCode: "US",
+      country: "United States",
+      regionCode: null,
+      region: null,
+      city: null,
+      timeZone: "America/Chicago",
+    });
+    expect(result.risk.reasons).toEqual([
+      { code: "PUBLIC_INFRASTRUCTURE", category: "network", severity: "info" },
+    ]);
+  });
+
+  it("passes through a residential proxy's reason code and partial location", async () => {
+    const stub = stubFetch({ body: RESIDENTIAL_PROXY_BODY });
+    const result = await client(stub.fetch).checkIp("203.0.113.9");
+
+    expect(result.risk.reasons?.[0]?.code).toBe("RESIDENTIAL_PROXY_DETECTED");
+    expect(result.location?.countryCode).toBe("DE");
+    // Nulls are preserved exactly, never coerced to "" or "Unknown".
+    expect(result.location?.region).toBeNull();
+    expect(result.location?.city).toBeNull();
+  });
+
+  it("still works against a legacy server that publishes neither field", async () => {
+    const stub = stubFetch({ body: LEGACY_IP_RISK_BODY });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+
+    expect(result.location).toBeUndefined();
+    expect(result.risk.reasons).toBeUndefined();
+  });
+
+  it("returns location as null rather than throwing when the server has no estimate", async () => {
+    const stub = stubFetch({ body: { ...IP_RISK_BODY, location: null } });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+
+    expect(result.location).toBeNull();
+  });
+
+  it("preserves an empty reasons array rather than dropping the field", async () => {
+    const stub = stubFetch({
+      body: { ...IP_RISK_BODY, risk: { ...IP_RISK_BODY.risk, reasons: [] } },
+    });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+
+    expect(result.risk.reasons).toEqual([]);
+  });
+
+  it("returns a future reason code, category, and severity unchanged rather than erroring", async () => {
+    const stub = stubFetch({
+      body: {
+        ...IP_RISK_BODY,
+        risk: {
+          ...IP_RISK_BODY.risk,
+          reasons: [
+            {
+              code: "FUTURE_NETWORK_SIGNAL",
+              category: "future_category",
+              severity: "future_severity",
+            },
+          ],
+        },
+      },
+    });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+
+    expect(result.risk.reasons).toEqual([
+      { code: "FUTURE_NETWORK_SIGNAL", category: "future_category", severity: "future_severity" },
+    ]);
+  });
+
+  it("does not upgrade a TOR_RELAY reason to TOR_EXIT_NODE based on flags.tor", async () => {
+    const stub = stubFetch({
+      body: {
+        ...IP_RISK_BODY,
+        risk: {
+          ...IP_RISK_BODY.risk,
+          reasons: [{ code: "TOR_RELAY", category: "anonymity", severity: "medium" }],
+        },
+        flags: { ...IP_RISK_BODY.flags, tor: true },
+      },
+    });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+
+    expect(result.flags.tor).toBe(true);
+    expect(result.risk.reasons).toEqual([
+      { code: "TOR_RELAY", category: "anonymity", severity: "medium" },
+    ]);
+  });
+
+  it("reports crawler identity, flags, and reasons independently without cross-deriving them", async () => {
+    const stub = stubFetch({ body: GOOGLEBOT_BODY });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+
+    expect(result.network.profile).toBe("search_crawler");
+    expect(result.flags.searchCrawler).toBe(true);
+    expect(result.flags.searchCrawlerName).toBe("Googlebot");
+    expect(result.risk.reasons).toEqual([
+      { code: "VERIFIED_SEARCH_CRAWLER", category: "identity", severity: "info" },
+      { code: "PUBLIC_INFRASTRUCTURE", category: "network", severity: "info" },
+    ]);
+    // A verified crawler identity is not treated as a risk signal by the SDK.
+    expect(result.risk.index).toBe(88);
+  });
+
+  it("issues exactly one HTTP request for checkIp regardless of location/reasons", async () => {
+    const stub = stubFetch({ body: IP_RISK_BODY });
+    await client(stub.fetch).checkIp("8.8.8.8");
+    expect(stub.calls).toHaveLength(1);
+  });
+
+  it("makes location and risk.reasons available through checkMany results", async () => {
+    const stub = stubFetch({ body: GOOGLEBOT_BODY });
+    const results = await client(stub.fetch).checkMany(["8.8.8.8"]);
+
+    const entry = results[0];
+    expect(entry?.ok).toBe(true);
+    if (entry?.ok === true) {
+      expect(entry.data.location?.country).toBe("United States");
+      expect(entry.data.risk.reasons?.[0]?.code).toBe("VERIFIED_SEARCH_CRAWLER");
+    }
   });
 });

@@ -8,8 +8,9 @@
 
 Ask the [NetRiskScan Developer API](https://api.netriskscan.com) what it knows about an IP address:
 a 0–100 cleanliness score, what kind of network it is, who operates it, whether proxy, VPN, Tor,
-datacenter, scanner, or abuse signals were detected, and whether it's verified search-engine crawler
-infrastructure.
+datacenter, scanner, or abuse signals were detected, whether it's verified search-engine crawler
+infrastructure, its network-level GeoIP location, and the server-generated reasons behind the
+assessment.
 
 ```ts
 const result = await client.checkIp("8.8.8.8");
@@ -31,6 +32,8 @@ Typed end to end, zero runtime dependencies, built on `fetch`.
   honouring `Retry-After`.
 - **Live rate-limit and quota visibility** — parsed from every response, without touching the payload.
 - **Three-valued signals preserved** — `null` means _unknown_, and never silently becomes `false`.
+- **GeoIP location and risk reasons** — network-level location and server-generated assessment
+  explanations, both additive and backward-compatible with older API servers.
 - **ESM-first, runs anywhere `fetch` does** — Node.js 20+, Bun, Deno, Cloudflare Workers.
 
 ## Installation
@@ -50,10 +53,19 @@ const client = new NetRiskScanClient({
   apiKey: process.env.NETRISKSCAN_API_KEY!,
 });
 
-const result = await client.checkIp("8.8.8.8");
+const result = await client.checkIp("66.249.87.5");
 
 console.log(result.risk.index); // 95      — higher is cleaner
 console.log(result.risk.band); //  "excellent"
+console.log(result.network.type); // "public_infrastructure"
+console.log(result.flags.proxyType); // null
+
+console.log(result.location?.country); // "United States"
+console.log(result.location?.city); //    "Mountain View"
+
+for (const reason of result.risk.reasons ?? []) {
+  console.log(reason.code, reason.severity);
+}
 ```
 
 ## Authentication
@@ -104,19 +116,33 @@ const result = await client.checkIp("8.8.8.8");
 
 ```jsonc
 {
-  "requestId": "req_8f3ab21c9dab",
+  "requestId": "req_example",
   "risk": {
     "index": 95, // 0–100, higher = cleaner. null when unscoreable.
     "band": "excellent", // excellent | good | fair | poor | high_risk | unknown
     "assessmentGrade": "complete", // complete | partial | limited | insufficient
+    "reasons": [
+      // server-generated explanations - see "Risk reasons" below. Omitted on older servers.
+      { "code": "VERIFIED_SEARCH_CRAWLER", "category": "identity", "severity": "info" },
+      { "code": "PUBLIC_INFRASTRUCTURE", "category": "network", "severity": "info" },
+    ],
   },
   "network": {
     "type": "public_infrastructure",
-    "profile": "public_dns_resolver", // only when NetRiskScan holds its own record
-    "service": "Google Public DNS", // ditto — display text, not an identifier
+    "profile": "search_crawler", // only when NetRiskScan holds its own record
+    "service": "Googlebot", // ditto — display text, not an identifier
     "connectionType": "direct",
     "asn": "AS15169",
     "organization": "Google LLC",
+  },
+  "location": {
+    // network-level GeoIP - see "Location" below. undefined on older servers, null when unresolvable.
+    "countryCode": "US",
+    "country": "United States",
+    "regionCode": "CA",
+    "region": "California",
+    "city": "Mountain View",
+    "timeZone": "America/Los_Angeles",
   },
   "flags": {
     "proxy": false,
@@ -124,15 +150,17 @@ const result = await client.checkIp("8.8.8.8");
 
     "vpn": false,
     "tor": false,
-    "datacenter": true,
+    "datacenter": false,
     "scanner": null,
     "abuse": false,
 
-    "searchCrawler": false, // verified search-engine crawler identity - see below
-    "searchCrawlerName": null,
+    "searchCrawler": true, // verified search-engine crawler identity - see below
+    "searchCrawlerName": "Googlebot",
   },
 }
 ```
+
+Final field names follow the server's `/v1/ip-risk/{ip}` contract as published.
 
 ### The index is a cleanliness score, not a threat score
 
@@ -230,6 +258,70 @@ This overlaps with `network.profile` / `network.service` (e.g. `profile: "search
 generates `flags.searchCrawler` from `network.profile`, or `flags.searchCrawlerName` from
 `network.service`.
 
+### Location
+
+`result.location` is **network-level IP geolocation** — a GeoIP estimate derived from the address's
+network/ASN, published by NetRiskScan. It is **not** a device's GPS or real-time physical location: a
+VPN or proxy resolves to the exit network's location, not the end user's, and `region` / `city` are
+frequently `null` even when `country` is known.
+
+```ts
+console.log(result.location?.country); // "United States"
+console.log(result.location?.city); //    "Mountain View", or null
+```
+
+`location` has three distinct states, and the SDK never collapses one into another:
+
+| Value       | Meaning                                                               |
+| ----------- | --------------------------------------------------------------------- |
+| `undefined` | This API server does not yet publish `location`.                      |
+| `null`      | The server supports `location`, but no estimate is available.         |
+| An object   | Location intelligence is available (individual fields may be `null`). |
+
+### Risk reasons
+
+`result.risk.reasons` is a list of **stable, server-generated explanations** for the assessment —
+`RiskReason[]`, each with a `code`, `category`, and `severity`:
+
+```ts
+for (const reason of result.risk.reasons ?? []) {
+  switch (reason.code) {
+    case "RESIDENTIAL_PROXY_DETECTED":
+      // apply your own business policy
+      break;
+    case "TOR_EXIT_NODE":
+      // apply your own business policy
+      break;
+    default:
+      // Future reason codes must remain valid - always keep a default branch, because the
+      // vocabulary is intentionally extensible.
+      break;
+  }
+}
+```
+
+**A reason is not automatically proof of malicious behaviour.** `VPN_DETECTED` means VPN
+infrastructure was observed, nothing more. Some reasons are purely explanatory and informational —
+`VERIFIED_SEARCH_CRAWLER`, `PUBLIC_INFRASTRUCTURE`, and `RESIDENTIAL_NETWORK` typically carry
+`severity: "info"` and describe _why_ an assessment came out the way it did, not that something adverse
+was found. Don't assume every entry lowered `risk.index`.
+
+`reasons` has the same three-state semantics as `location`: `undefined` means the server hasn't
+published this field yet, `[]` means it has nothing to report this time, and a populated array is one or
+more explanations. `RiskReasonCode`, `RiskReasonCategory`, and `RiskReasonSeverity` are all open
+vocabularies (see below) — a code the SDK doesn't recognize yet still comes through unchanged.
+
+Don't use `reasons` to re-implement NetRiskScan's scoring:
+
+```ts
+// Don't do this - risk.index is already NetRiskScan's official score.
+let score = 100;
+if (result.flags.proxy) score -= 20;
+if (result.flags.tor) score -= 50;
+```
+
+Use `result.risk.index` for the score, and `reasons` for explanation, business rules, and audit trails.
+
 ### An unscoreable address is a success, not an error
 
 Loopback, private, and reserved addresses return `200` with `risk.index === null`,
@@ -245,10 +337,10 @@ if (result.risk.index === null) {
 
 ### Open vocabularies
 
-`band`, `assessmentGrade`, `network.type`, `network.connectionType`, `network.profile`, and
-`flags.proxyType` are typed as open unions: known values autocomplete and narrow, and a value the
-server adds later still type-checks and renders instead of crashing. Handle the unknown case, and never
-hard-code an exhaustive whitelist.
+`band`, `assessmentGrade`, `network.type`, `network.connectionType`, `network.profile`,
+`flags.proxyType`, and `risk.reasons[].code` / `.category` / `.severity` are typed as open unions: known
+values autocomplete and narrow, and a value the server adds later still type-checks and renders instead
+of crashing. Handle the unknown case, and never hard-code an exhaustive whitelist.
 
 `flags.searchCrawlerName` is a plain `string | null`, not an enum, so it needs no such handling — any
 crawler name the server sends renders as-is.
@@ -442,6 +534,11 @@ import type {
   ProxyType,
   DetectionFlag,
   ResponseMeta,
+  IpLocation,
+  RiskReason,
+  RiskReasonCode,
+  RiskReasonCategory,
+  RiskReasonSeverity,
 } from "@netriskscan/sdk";
 ```
 

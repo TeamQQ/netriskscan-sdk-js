@@ -89,6 +89,68 @@ export type NetworkProfile = OpenEnum<
  */
 export type DetectionFlag = boolean | null;
 
+/**
+ * Broad grouping a {@link RiskReason} belongs to, as classified server-side.
+ *
+ * Open vocabulary, same as {@link RiskBand} / {@link NetworkType} - a new category the server
+ * introduces still type-checks and renders.
+ */
+export type RiskReasonCategory = OpenEnum<
+  "network" | "anonymity" | "reputation" | "threat" | "identity" | "quality"
+>;
+
+/**
+ * How much weight NetRiskScan gives a {@link RiskReason} in its own assessment.
+ *
+ * `info` covers explanatory, non-adverse reasons (e.g. a verified crawler identity) as much as it
+ * covers adverse ones - severity is not a proxy for "this lowered the index".
+ */
+export type RiskReasonSeverity = OpenEnum<"info" | "low" | "medium" | "high" | "critical">;
+
+/**
+ * Identifier for one server-generated explanation, published alongside {@link IpRisk.reasons}.
+ *
+ * Open vocabulary by design: the server adds new reason codes over time, and an SDK that has not been
+ * upgraded yet must still return them unchanged rather than erroring or silently dropping them. Always
+ * keep a `default` branch when narrowing on this.
+ */
+export type RiskReasonCode = OpenEnum<
+  | "RESIDENTIAL_PROXY_DETECTED"
+  | "ISP_PROXY_DETECTED"
+  | "MOBILE_PROXY_DETECTED"
+  | "DATACENTER_PROXY_DETECTED"
+  | "PROXY_DETECTED"
+  | "VPN_DETECTED"
+  | "TOR_EXIT_NODE"
+  | "TOR_RELAY"
+  | "KNOWN_SCANNER"
+  | "ABUSE_ACTIVITY"
+  | "BLACKLIST_MATCH"
+  | "BOTNET_C2"
+  | "COMPROMISED_HOST"
+  | "SSH_BRUTE_FORCE"
+  | "CREDENTIAL_ATTACK"
+  | "VERIFIED_SEARCH_CRAWLER"
+  | "PUBLIC_INFRASTRUCTURE"
+  | "RESIDENTIAL_NETWORK"
+  | "CONFLICTING_EVIDENCE"
+  | "INSUFFICIENT_EVIDENCE"
+>;
+
+/**
+ * One server-generated explanation for an {@link IpRisk} assessment.
+ *
+ * This describes an observed network characteristic or a piece of assessment evidence - it is not a
+ * judgment of intent. `VPN_DETECTED` means VPN infrastructure was observed, not that the address is
+ * malicious; a `severity: "info"` reason like `VERIFIED_SEARCH_CRAWLER` can be purely explanatory and
+ * need not have lowered {@link IpRisk.index} at all.
+ */
+export interface RiskReason {
+  code: RiskReasonCode;
+  category: RiskReasonCategory;
+  severity: RiskReasonSeverity;
+}
+
 /** The one overall score NetRiskScan publishes. */
 export interface IpRisk {
   /**
@@ -102,6 +164,15 @@ export interface IpRisk {
   band: RiskBand | null;
   /** Evidence completeness behind this assessment. Always present. */
   assessmentGrade: AssessmentGrade;
+  /**
+   * Server-generated explanations for observed network characteristics and assessment evidence behind
+   * this result - not a fraud verdict, and not every entry is adverse (see {@link RiskReason}).
+   *
+   * **Omitted** by API servers that do not yet publish this field - distinct from `[]`, which means the
+   * server supports `reasons` but has nothing to report this time. The SDK never fabricates one state
+   * from the other.
+   */
+  reasons?: RiskReason[];
 }
 
 /** Network identity of the queried address. */
@@ -190,6 +261,29 @@ export interface IpFlags {
   searchCrawlerName: string | null;
 }
 
+/**
+ * Network-level IP geolocation for the queried address, as published by NetRiskScan.
+ *
+ * This is **GeoIP intelligence derived from the network/ASN**, not a device's GPS or real-time
+ * position - two addresses in the same city can resolve to different estimates, and a VPN or proxy
+ * will resolve to the exit network's location rather than the end user's. `region` and `city` are
+ * frequently `null` even when `country` is known; never treat this as exact physical placement.
+ */
+export interface IpLocation {
+  /** ISO 3166-1 alpha-2 country code, e.g. `"US"`. `null` when unavailable. */
+  countryCode: string | null;
+  /** Country display name reported by NetRiskScan. */
+  country: string | null;
+  /** Region/subdivision code when available, e.g. `"CA"`. */
+  regionCode: string | null;
+  /** Region/subdivision display name, e.g. `"California"`. */
+  region: string | null;
+  /** Network-level GeoIP city estimate. */
+  city: string | null;
+  /** IANA time-zone identifier, e.g. `"America/Los_Angeles"`. */
+  timeZone: string | null;
+}
+
 /** How a request was authenticated. Open vocabulary - render the string, do not hard-code a whitelist. */
 export type UsageMode = OpenEnum<"anonymous" | "authenticated">;
 
@@ -223,6 +317,16 @@ export interface IpRiskResult {
   requestId: string;
   risk: IpRisk;
   network: IpNetwork;
+  /**
+   * Network-level IP geolocation. See {@link IpLocation} - not a device's GPS or physical location.
+   *
+   * - **Omitted (`undefined`)** - this API server does not yet publish `location`.
+   * - **`null`** - the server supports `location`, but no estimate is available for this address.
+   * - **An object** - location intelligence is available (individual fields may still be `null`).
+   *
+   * The SDK never collapses these three states into one another.
+   */
+  location?: IpLocation | null;
   flags: IpFlags;
   /**
    * The anonymous tier's daily counter. Present when this call had no `apiKey`; omitted on an

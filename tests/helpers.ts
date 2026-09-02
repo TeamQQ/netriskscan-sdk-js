@@ -59,11 +59,50 @@ export function failingFetch(error: Error = new TypeError("fetch failed")): Fetc
 /** A representative `GET /v1/ip-risk/{ip}` payload, matching the server's `PublicIpRiskResponseV1`. */
 export const IP_RISK_BODY = {
   requestId: "req_8f3ab21c9dab",
-  risk: { index: 95, band: "excellent", assessmentGrade: "complete" },
+  risk: {
+    index: 95,
+    band: "excellent",
+    assessmentGrade: "complete",
+    reasons: [{ code: "PUBLIC_INFRASTRUCTURE", category: "network", severity: "info" }],
+  },
   network: {
     type: "public_infrastructure",
     profile: "public_dns_resolver",
     service: "Google Public DNS",
+    connectionType: "direct",
+    asn: "AS15169",
+    organization: "Google LLC",
+  },
+  location: {
+    countryCode: "US",
+    country: "United States",
+    regionCode: null,
+    region: null,
+    city: null,
+    timeZone: "America/Chicago",
+  },
+  flags: {
+    proxy: false,
+    proxyType: null,
+    vpn: false,
+    tor: false,
+    datacenter: true,
+    scanner: null,
+    abuse: false,
+    searchCrawler: false,
+    searchCrawlerName: null,
+  },
+} as const;
+
+/**
+ * A pre-P0 `GET /v1/ip-risk/{ip}` payload from a server that does not yet publish `location` or
+ * `risk.reasons` - both keys are absent entirely, not `null`.
+ */
+export const LEGACY_IP_RISK_BODY = {
+  requestId: "req_legacy00000",
+  risk: { index: 90, band: "excellent", assessmentGrade: "complete" },
+  network: {
+    type: "public_infrastructure",
     connectionType: "direct",
     asn: "AS15169",
     organization: "Google LLC",
@@ -73,7 +112,7 @@ export const IP_RISK_BODY = {
     proxyType: null,
     vpn: false,
     tor: false,
-    datacenter: true,
+    datacenter: false,
     scanner: null,
     abuse: false,
     searchCrawler: false,
@@ -96,12 +135,25 @@ export const ANONYMOUS_IP_RISK_BODY = {
 /** A residential proxy payload - `flags.proxy` and `flags.proxyType` populated together. */
 export const RESIDENTIAL_PROXY_BODY = {
   requestId: "req_residentialproxy0",
-  risk: { index: 41, band: "poor", assessmentGrade: "complete" },
+  risk: {
+    index: 41,
+    band: "poor",
+    assessmentGrade: "complete",
+    reasons: [{ code: "RESIDENTIAL_PROXY_DETECTED", category: "anonymity", severity: "high" }],
+  },
   network: {
     type: "residential",
     connectionType: "residential_proxy",
     asn: "AS64500",
     organization: "Example Residential ISP",
+  },
+  location: {
+    countryCode: "DE",
+    country: "Germany",
+    regionCode: null,
+    region: null,
+    city: null,
+    timeZone: "Europe/Berlin",
   },
   flags: {
     proxy: true,
@@ -123,7 +175,15 @@ export const RESIDENTIAL_PROXY_BODY = {
  */
 export const GOOGLEBOT_BODY = {
   requestId: "req_googlebot00000",
-  risk: { index: 88, band: "good", assessmentGrade: "complete" },
+  risk: {
+    index: 88,
+    band: "good",
+    assessmentGrade: "complete",
+    reasons: [
+      { code: "VERIFIED_SEARCH_CRAWLER", category: "identity", severity: "info" },
+      { code: "PUBLIC_INFRASTRUCTURE", category: "network", severity: "info" },
+    ],
+  },
   network: {
     type: "public_infrastructure",
     profile: "search_crawler",
@@ -131,6 +191,14 @@ export const GOOGLEBOT_BODY = {
     connectionType: "direct",
     asn: "AS15169",
     organization: "Google LLC",
+  },
+  location: {
+    countryCode: "US",
+    country: "United States",
+    regionCode: "CA",
+    region: "California",
+    city: "Mountain View",
+    timeZone: "America/Los_Angeles",
   },
   flags: {
     proxy: false,
