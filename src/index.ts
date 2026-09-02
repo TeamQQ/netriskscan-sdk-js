@@ -54,6 +54,7 @@ export type {
   NetworkProfile,
   NetworkType,
   OpenEnum,
+  ProxyType,
   RiskBand,
   UsageMode,
 } from "./types/risk.js";

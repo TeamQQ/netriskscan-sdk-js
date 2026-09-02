@@ -50,6 +50,17 @@ export type ConnectionType = OpenEnum<
 >;
 
 /**
+ * Server-classified proxy infrastructure subtype, published when {@link IpFlags.proxy} is `true`.
+ *
+ * Open vocabulary, same as {@link RiskBand} / {@link NetworkType} / {@link ConnectionType} /
+ * {@link NetworkProfile} - a new subtype the server introduces still type-checks and renders, rather
+ * than becoming a type error against an already-shipped SDK.
+ */
+export type ProxyType = OpenEnum<
+  "residential_proxy" | "isp_proxy" | "mobile_proxy" | "datacenter_proxy" | "unknown_proxy"
+>;
+
+/**
  * What the network is *for*. Present only when NetRiskScan holds its own record covering the address.
  *
  * The value set grows as official sources are onboarded, so treat it as an open vocabulary.
@@ -121,15 +132,29 @@ export interface IpNetwork {
 }
 
 /**
- * Six independent detection facts, each three-valued - see {@link DetectionFlag}.
+ * Published detection and classification fields for the queried address.
  *
- * None of these is a projection of {@link IpNetwork.type}: in particular
+ * The detection facts (`proxy`, `vpn`, `tor`, `datacenter`, `scanner`, `abuse`, `searchCrawler`) are
+ * each three-valued - see {@link DetectionFlag}. `proxyType` and `searchCrawlerName` are classification
+ * metadata: nullable strings published alongside a fact, never a fact themselves.
+ *
+ * None of these is a projection of {@link IpNetwork.type} or {@link IpNetwork.profile}: in particular
  * `type === "public_infrastructure"` implies nothing about {@link IpFlags.datacenter}, because a public
- * DNS resolver is routinely public infrastructure and not a datacenter.
+ * DNS resolver is routinely public infrastructure and not a datacenter. Likewise `searchCrawler` /
+ * `searchCrawlerName` and `network.profile` / `network.service` are reported independently even where
+ * they overlap (e.g. both naming "Googlebot") - the SDK never derives one from the other.
  */
 export interface IpFlags {
-  /** Proxy infrastructure detected. */
+  /** Whether proxy infrastructure was detected. */
   proxy: DetectionFlag;
+  /**
+   * Server-classified proxy infrastructure subtype.
+   *
+   * Populated only when `proxy === true`. `null` means there is no published proxy subtype - including
+   * whenever `proxy` is not `true`. The SDK reports this field exactly as received and never corrects
+   * it against `proxy` itself.
+   */
+  proxyType: ProxyType | null;
   /** VPN infrastructure detected. */
   vpn: DetectionFlag;
   /** Tor infrastructure detected. */
@@ -139,12 +164,30 @@ export interface IpFlags {
   /**
    * Internet-scanning, crawling, or bot behaviour observed.
    *
-   * An address correctly identified as an official crawler is not `true` by that fact alone: identity
-   * is {@link IpNetwork.profile}, this is behaviour a source actually observed.
+   * This is behavioural intelligence, not identity - it must not be confused with `searchCrawler`. An
+   * address correctly identified as an official crawler is not `true` here by that fact alone: identity
+   * is {@link IpNetwork.profile} / `searchCrawler`, this is behaviour a source actually observed. A
+   * generic scanner can be `scanner: true, searchCrawler: false` just as easily as a verified crawler
+   * can be `scanner: true, searchCrawler: true`.
    */
   scanner: DetectionFlag;
   /** Standing abuse reputation - abuse history or blacklist presence. */
   abuse: DetectionFlag;
+  /**
+   * Whether the address has been identified by NetRiskScan as verified search-engine crawler
+   * infrastructure.
+   *
+   * This is identity/classification, not generic bot or scanner behaviour - see `scanner` above.
+   */
+  searchCrawler: DetectionFlag;
+  /**
+   * Canonical crawler/service name published by NetRiskScan when `searchCrawler === true`, e.g.
+   * `"Googlebot"`, `"Bingbot"`, `"Applebot"`.
+   *
+   * Open string by design - a new crawler identity the server adds later still renders here without
+   * requiring an SDK release, so do not narrow this to a closed union.
+   */
+  searchCrawlerName: string | null;
 }
 
 /** How a request was authenticated. Open vocabulary - render the string, do not hard-code a whitelist. */

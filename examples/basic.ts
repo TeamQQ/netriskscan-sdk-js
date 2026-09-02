@@ -27,9 +27,16 @@ if (result.network.service) {
 
 // Render the three states as three states: `null` is "unknown", never "no".
 const render = (flag: boolean | null): string => (flag === null ? "unknown" : flag ? "yes" : "no");
-for (const [name, flag] of Object.entries(result.flags) as [string, boolean | null][]) {
-  console.log(`  ${name.padEnd(11)}`, render(flag));
-}
+
+console.log("  proxy      ", render(result.flags.proxy));
+console.log("  proxyType  ", result.flags.proxyType ?? "n/a");
+console.log("  vpn        ", render(result.flags.vpn));
+console.log("  tor        ", render(result.flags.tor));
+console.log("  datacenter ", render(result.flags.datacenter));
+console.log("  scanner    ", render(result.flags.scanner));
+console.log("  abuse      ", render(result.flags.abuse));
+console.log("  searchBot  ", render(result.flags.searchCrawler));
+console.log("  crawlerName", result.flags.searchCrawlerName ?? "n/a");
 
 console.log("requestId:  ", result.requestId);
 console.log("quota left: ", getResponseMeta(result)?.quota.remaining ?? "n/a");

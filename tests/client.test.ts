@@ -9,7 +9,9 @@ import {
 } from "../src/index.js";
 import {
   ANONYMOUS_IP_RISK_BODY,
+  GOOGLEBOT_BODY,
   IP_RISK_BODY,
+  RESIDENTIAL_PROXY_BODY,
   TEST_API_KEY,
   USAGE_BODY,
   errorBody,
@@ -144,7 +146,17 @@ describe("checkIp", () => {
       requestId: "req_unscoreable0",
       risk: { index: null, band: null, assessmentGrade: "insufficient" },
       network: { type: null, connectionType: null, asn: null, organization: null },
-      flags: { proxy: null, vpn: null, tor: null, datacenter: null, scanner: null, abuse: null },
+      flags: {
+        proxy: null,
+        proxyType: null,
+        vpn: null,
+        tor: null,
+        datacenter: null,
+        scanner: null,
+        abuse: null,
+        searchCrawler: null,
+        searchCrawlerName: null,
+      },
     };
     const stub = stubFetch({ body });
     const result = await client(stub.fetch).checkIp("127.0.0.1");
@@ -152,6 +164,30 @@ describe("checkIp", () => {
     expect(result.risk.index).toBeNull();
     expect(result.risk.band).toBeNull();
     expect(result.risk.assessmentGrade).toBe("insufficient");
+  });
+
+  it("passes through flags.proxyType for a classified proxy", async () => {
+    const stub = stubFetch({ body: RESIDENTIAL_PROXY_BODY });
+    const result = await client(stub.fetch).checkIp("203.0.113.9");
+
+    expect(result.flags.proxy).toBe(true);
+    expect(result.flags.proxyType).toBe("residential_proxy");
+  });
+
+  it("passes through flags.searchCrawler and flags.searchCrawlerName for a verified crawler", async () => {
+    const stub = stubFetch({ body: GOOGLEBOT_BODY });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+
+    expect(result.flags.searchCrawler).toBe(true);
+    expect(result.flags.searchCrawlerName).toBe("Googlebot");
+  });
+
+  it("preserves null for proxyType and searchCrawlerName rather than coercing to false", async () => {
+    const stub = stubFetch({ body: IP_RISK_BODY });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+
+    expect(result.flags.proxyType).toBeNull();
+    expect(result.flags.searchCrawlerName).toBeNull();
   });
 
   it("reports a malformed JSON body as a network error, not a successful parse", async () => {

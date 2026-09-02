@@ -68,7 +68,17 @@ export const IP_RISK_BODY = {
     asn: "AS15169",
     organization: "Google LLC",
   },
-  flags: { proxy: false, vpn: false, tor: false, datacenter: true, scanner: null, abuse: false },
+  flags: {
+    proxy: false,
+    proxyType: null,
+    vpn: false,
+    tor: false,
+    datacenter: true,
+    scanner: null,
+    abuse: false,
+    searchCrawler: false,
+    searchCrawlerName: null,
+  },
 } as const;
 
 /** A representative anonymous-tier `GET /v1/ip-risk/{ip}` payload - `IP_RISK_BODY` plus `usage`. */
@@ -80,6 +90,58 @@ export const ANONYMOUS_IP_RISK_BODY = {
     used: 1,
     remaining: 29,
     resetAt: "2026-09-01T00:00:00Z",
+  },
+} as const;
+
+/** A residential proxy payload - `flags.proxy` and `flags.proxyType` populated together. */
+export const RESIDENTIAL_PROXY_BODY = {
+  requestId: "req_residentialproxy0",
+  risk: { index: 41, band: "poor", assessmentGrade: "complete" },
+  network: {
+    type: "residential",
+    connectionType: "residential_proxy",
+    asn: "AS64500",
+    organization: "Example Residential ISP",
+  },
+  flags: {
+    proxy: true,
+    proxyType: "residential_proxy",
+    vpn: false,
+    tor: false,
+    datacenter: false,
+    scanner: false,
+    abuse: false,
+    searchCrawler: false,
+    searchCrawlerName: null,
+  },
+} as const;
+
+/**
+ * A verified Googlebot payload - `flags.searchCrawler` / `flags.searchCrawlerName` alongside the
+ * independently-reported `network.profile` / `network.service`. Both pairs name "Googlebot" here, but
+ * the SDK reports them as received rather than deriving one from the other.
+ */
+export const GOOGLEBOT_BODY = {
+  requestId: "req_googlebot00000",
+  risk: { index: 88, band: "good", assessmentGrade: "complete" },
+  network: {
+    type: "public_infrastructure",
+    profile: "search_crawler",
+    service: "Googlebot",
+    connectionType: "direct",
+    asn: "AS15169",
+    organization: "Google LLC",
+  },
+  flags: {
+    proxy: false,
+    proxyType: null,
+    vpn: false,
+    tor: false,
+    datacenter: true,
+    scanner: null,
+    abuse: false,
+    searchCrawler: true,
+    searchCrawlerName: "Googlebot",
   },
 } as const;
 

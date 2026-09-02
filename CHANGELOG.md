@@ -17,11 +17,17 @@ releases may contain breaking changes.
   present on `checkIp()` results made with no `apiKey`.
 - A `429` hit with no `apiKey` configured now appends a registration hint to
   `NetRiskScanRateLimitError.message`, pointing at the developer console.
+- Added `IpFlags.proxyType` with typed support for residential, ISP, mobile, datacenter, and unknown
+  proxy classifications.
+- Added `IpFlags.searchCrawler` and `IpFlags.searchCrawlerName` for verified search-engine crawler
+  identity.
+- Exported the new `ProxyType` public type.
 
 ### Changed
 
 - `getUsage()` now throws `NetRiskScanValidationError` locally (no request sent) when called with no
   `apiKey` - there is no account to report usage for on the anonymous tier.
+- Updated examples and documentation so `IpFlags` is no longer treated as a boolean-only collection.
 
 ## [0.1.0] - 2026-08-28
 

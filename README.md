@@ -7,8 +7,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 Ask the [NetRiskScan Developer API](https://api.netriskscan.com) what it knows about an IP address:
-a 0–100 cleanliness score, what kind of network it is, who operates it, and whether proxy, VPN, Tor,
-datacenter, scanner, or abuse signals were detected.
+a 0–100 cleanliness score, what kind of network it is, who operates it, whether proxy, VPN, Tor,
+datacenter, scanner, or abuse signals were detected, and whether it's verified search-engine crawler
+infrastructure.
 
 ```ts
 const result = await client.checkIp("8.8.8.8");
@@ -119,11 +120,16 @@ const result = await client.checkIp("8.8.8.8");
   },
   "flags": {
     "proxy": false,
+    "proxyType": null, // classification detail, populated only when proxy is true
+
     "vpn": false,
     "tor": false,
     "datacenter": true,
     "scanner": null,
     "abuse": false,
+
+    "searchCrawler": false, // verified search-engine crawler identity - see below
+    "searchCrawlerName": null,
   },
 }
 ```
@@ -136,7 +142,8 @@ never disagree with the API.
 
 ### `null` is not `false`
 
-Every entry in `flags` is three-valued:
+Detection flags are three-valued: `proxy`, `vpn`, `tor`, `datacenter`, `scanner`, `abuse`, and
+`searchCrawler`.
 
 | Value   | Meaning                                                                       |
 | ------- | ----------------------------------------------------------------------------- |
@@ -151,8 +158,77 @@ finding:
 const label = (flag: boolean | null) => (flag === null ? "Unknown" : flag ? "Yes" : "No");
 ```
 
+`proxyType` and `searchCrawlerName` are **not** `DetectionFlag`s — they are nullable classification
+strings published alongside a fact (see below), not the fact itself.
+
 `network.type === "public_infrastructure"` implies **nothing** about `flags.datacenter` — a public DNS
 resolver is routinely public infrastructure and not a datacenter.
+
+### Proxy type
+
+When `flags.proxy` is `true`, the server may publish a classification subtype in `flags.proxyType`:
+
+```ts
+result.flags.proxy; // true
+result.flags.proxyType; // "residential_proxy"
+```
+
+Known values: `residential_proxy`, `isp_proxy`, `mobile_proxy`, `datacenter_proxy`, `unknown_proxy`.
+`proxyType` is an open SDK vocabulary (see below) — always handle a value you don't recognize:
+
+```ts
+switch (result.flags.proxyType) {
+  case "residential_proxy":
+    break;
+  case "datacenter_proxy":
+    break;
+  default:
+    // null, or a value introduced by a newer API version
+    break;
+}
+```
+
+The SDK never infers `proxyType` from `proxy`, or vice versa — both are reported exactly as the server
+sends them.
+
+### Search crawler identity
+
+`flags.searchCrawler` and `flags.searchCrawlerName` report verified search-engine crawler
+infrastructure — an identity fact, published by NetRiskScan itself:
+
+```ts
+if (result.flags.searchCrawler === true) {
+  console.log(result.flags.searchCrawlerName); // "Googlebot", "Bingbot", "Applebot", ...
+}
+```
+
+`searchCrawlerName` is `string | null`, not a closed union — a crawler NetRiskScan adds support for
+later still renders here without an SDK upgrade.
+
+#### Crawler identity vs. scanner behaviour
+
+`flags.scanner` and `flags.searchCrawler` answer different questions, and the SDK never derives one
+from the other:
+
+- **`flags.scanner`** — behavioural / reputation intelligence: internet-scanning, crawling, or bot
+  behaviour a source actually observed.
+- **`flags.searchCrawler`** / **`flags.searchCrawlerName`** — verified infrastructure identity
+  published by NetRiskScan.
+
+`scanner: true` does **not** imply `searchCrawler: true` — most scanning traffic is not a search
+engine. All four combinations are valid and independently meaningful:
+
+```jsonc
+{ "scanner": true, "searchCrawler": true, "searchCrawlerName": "Googlebot" } // a verified crawler that also scans
+{ "scanner": true, "searchCrawler": false, "searchCrawlerName": null } // an ordinary scanner
+{ "scanner": null, "searchCrawler": true, "searchCrawlerName": "Applebot" } // identity confirmed, behaviour unevaluated
+{ "scanner": false, "searchCrawler": false, "searchCrawlerName": null } // neither
+```
+
+This overlaps with `network.profile` / `network.service` (e.g. `profile: "search_crawler"`,
+`service: "Googlebot"`) in the common case, but the two are reported independently — the SDK never
+generates `flags.searchCrawler` from `network.profile`, or `flags.searchCrawlerName` from
+`network.service`.
 
 ### An unscoreable address is a success, not an error
 
@@ -169,9 +245,13 @@ if (result.risk.index === null) {
 
 ### Open vocabularies
 
-`band`, `assessmentGrade`, `network.type`, `network.connectionType`, and `network.profile` are typed as
-open unions: known values autocomplete and narrow, and a value the server adds later still type-checks
-and renders instead of crashing. Handle the unknown case, and never hard-code an exhaustive whitelist.
+`band`, `assessmentGrade`, `network.type`, `network.connectionType`, `network.profile`, and
+`flags.proxyType` are typed as open unions: known values autocomplete and narrow, and a value the
+server adds later still type-checks and renders instead of crashing. Handle the unknown case, and never
+hard-code an exhaustive whitelist.
+
+`flags.searchCrawlerName` is a plain `string | null`, not an enum, so it needs no such handling — any
+crawler name the server sends renders as-is.
 
 ### Several addresses at once
 
@@ -359,6 +439,7 @@ import type {
   AssessmentGrade,
   NetworkType,
   ConnectionType,
+  ProxyType,
   DetectionFlag,
   ResponseMeta,
 } from "@netriskscan/sdk";
