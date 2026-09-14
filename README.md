@@ -623,7 +623,7 @@ transports and types the published result, and computes nothing locally.
 Prefer the terminal? [`netriskscan-cli`](https://github.com/TeamQQ/netriskscan-cli) wraps the same API.
 
 ```bash
-npx netriskscan check 8.8.8.8
+npx netriskscan-cli check 8.8.8.8
 ```
 
 ## Contributing
