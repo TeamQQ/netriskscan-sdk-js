@@ -6,7 +6,12 @@ import type { IpLocation, IpRiskResult, RiskReason } from "../src/index.js";
 
 const packageJson = JSON.parse(
   readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
-) as { version: string; dependencies?: Record<string, string>; private?: boolean };
+) as {
+  version: string;
+  homepage?: string;
+  dependencies?: Record<string, string>;
+  private?: boolean;
+};
 
 describe("package integrity", () => {
   it("keeps the inlined VERSION in step with package.json", () => {
@@ -19,6 +24,10 @@ describe("package integrity", () => {
 
   it("is publishable", () => {
     expect(packageJson.private).not.toBe(true);
+  });
+
+  it("points package users to the official website", () => {
+    expect(packageJson.homepage).toBe("https://www.netriskscan.com/");
   });
 });
 
