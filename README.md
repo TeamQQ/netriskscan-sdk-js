@@ -1,23 +1,29 @@
 # NetRiskScan SDK for JavaScript
 
-**IP risk & network intelligence — the official JavaScript / TypeScript SDK.**
+Official JavaScript and TypeScript SDK for the [NetRiskScan](https://www.netriskscan.com/) API — IP
+lookup, IP risk scoring, IP reputation, and proxy/VPN/Tor/datacenter detection, plus network
+intelligence (ASN, organization, network-level location) for any IPv4 or IPv6 address. Works from
+Node.js, Bun, Deno, and Cloudflare Workers — anonymous access included, no signup required to try it.
+
+```bash
+npm install @netriskscan/sdk
+```
+
+```ts
+import { NetRiskScanClient } from "@netriskscan/sdk";
+
+const client = new NetRiskScanClient({});
+const result = await client.checkIp("8.8.8.8");
+
+console.log(result.risk.index, result.risk.band); // 95 "excellent" — higher is cleaner, not a threat score
+```
 
 [![CI](https://github.com/TeamQQ/netriskscan-sdk-js/actions/workflows/ci.yml/badge.svg)](https://github.com/TeamQQ/netriskscan-sdk-js/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@netriskscan/sdk.svg)](https://www.npmjs.com/package/@netriskscan/sdk)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-Ask the [NetRiskScan Developer API](https://api.netriskscan.com) what it knows about an IP address:
-a 0–100 cleanliness score, what kind of network it is, who operates it, whether proxy, VPN, Tor,
-datacenter, scanner, or abuse signals were detected, whether it's verified search-engine crawler
-infrastructure, its network-level GeoIP location, and the server-generated reasons behind the
-assessment.
-
-```ts
-const result = await client.checkIp("8.8.8.8");
-// → index 95, band "excellent", public_infrastructure, Google LLC
-```
-
-Typed end to end, zero runtime dependencies, built on `fetch`.
+Typed end to end, zero runtime dependencies, built on `fetch`. Requires **Node.js 20 or newer** (for
+the global `fetch`), or any runtime that provides `fetch`.
 
 ---
 
@@ -35,6 +41,15 @@ Typed end to end, zero runtime dependencies, built on `fetch`.
 - **GeoIP location and risk reasons** — network-level location and server-generated assessment
   explanations, both additive and backward-compatible with older API servers.
 - **ESM-first, runs anywhere `fetch` does** — Node.js 20+, Bun, Deno, Cloudflare Workers.
+
+## Use cases
+
+- Detect proxy, VPN, and Tor infrastructure before signup, login, or checkout
+- Evaluate IP reputation as one signal in a fraud-prevention pipeline
+- Distinguish verified search-engine crawlers from generic bot/scanner traffic
+- Inspect datacenter and hosting traffic separately from residential networks
+- Add network intelligence (ASN, organization, connection type) to abuse-prevention systems
+- Gate CI/CD or infrastructure checks on a minimum risk index
 
 ## Installation
 
@@ -110,6 +125,9 @@ Once the daily limit is hit, `checkIp()` throws `NetRiskScanRateLimitError` same
 
 ## Check an IP
 
+`checkIp()` is the SDK's IP lookup and IP reputation call — one request returns a risk score, network
+identity, proxy/VPN/Tor flags, and network-level location for the address.
+
 ```ts
 const result = await client.checkIp("8.8.8.8");
 ```
@@ -164,9 +182,9 @@ Final field names follow the server's `/v1/ip-risk/{ip}` contract as published.
 
 ### The index is a cleanliness score, not a threat score
 
-**Higher is better.** `95` is an excellent network environment; `12` is a bad one. The band is
-classified server-side — read `risk.band` rather than re-deriving thresholds locally, so your UI can
-never disagree with the API.
+`result.risk.index` is the IP risk score this API publishes for the address. **Higher is better.** `95`
+is an excellent network environment; `12` is a bad one. The band is classified server-side — read
+`risk.band` rather than re-deriving thresholds locally, so your UI can never disagree with the API.
 
 ### `null` is not `false`
 
@@ -191,6 +209,22 @@ strings published alongside a fact (see below), not the fact itself.
 
 `network.type === "public_infrastructure"` implies **nothing** about `flags.datacenter` — a public DNS
 resolver is routinely public infrastructure and not a datacenter.
+
+### Proxy, VPN, and Tor detection
+
+`flags.proxy`, `flags.vpn`, and `flags.tor` are NetRiskScan's core anonymity-detection signals —
+independent, three-valued facts published by the API and passed through unchanged:
+
+```ts
+const { proxy, vpn, tor } = result.flags;
+
+if (proxy || vpn || tor) {
+  console.log("anonymizing network detected", { proxy, vpn, tor });
+}
+```
+
+The SDK does not run its own proxy, VPN, or Tor detection locally — it transports and types the
+verdict NetRiskScan's Developer API already computed for the address.
 
 ### Proxy type
 
@@ -257,6 +291,21 @@ This overlaps with `network.profile` / `network.service` (e.g. `profile: "search
 `service: "Googlebot"`) in the common case, but the two are reported independently — the SDK never
 generates `flags.searchCrawler` from `network.profile`, or `flags.searchCrawlerName` from
 `network.service`.
+
+### Datacenter and network intelligence
+
+`flags.datacenter` reports whether the address sits in hosting/datacenter infrastructure rather than a
+residential or mobile network, and `network.asn` / `network.organization` name the autonomous system and
+its operator:
+
+```ts
+console.log(result.flags.datacenter); // true | false | null
+console.log(result.network.asn, result.network.organization); // "AS15169" "Google LLC"
+```
+
+As with every other flag, `datacenter: null` means unknown, not "no" — see [Detection flags](#null-is-not-false)
+above. `network.type === "public_infrastructure"` implies nothing about `flags.datacenter`: a public DNS
+resolver is routinely public infrastructure and not a datacenter.
 
 ### Location
 
@@ -565,6 +614,10 @@ NETRISKSCAN_API_KEY=nrs_live_… npx tsx examples/basic.ts 8.8.8.8
 
 ## Supported Runtimes
 
+Node.js 20+ is the primary target for this IP reputation and IP lookup client, but the same build runs
+unmodified as a Bun or Deno client, or inside a Cloudflare Worker — anywhere the platform provides
+`fetch`.
+
 | Runtime            | Status                                        |
 | ------------------ | --------------------------------------------- |
 | Node.js 20+        | Primary target, tested in CI on 20 and 22     |
@@ -618,13 +671,65 @@ To report a vulnerability, see [SECURITY.md](./SECURITY.md).
 This SDK talks only to the public `/v1` Developer API. Risk scoring happens server-side; the SDK
 transports and types the published result, and computes nothing locally.
 
-## CLI
+## NetRiskScan ecosystem
 
-Prefer the terminal? [`netriskscan-cli`](https://github.com/TeamQQ/netriskscan-cli) wraps the same API.
+- **JavaScript / TypeScript SDK** (this package) — `npm install @netriskscan/sdk`
+- **CLI** — [`netriskscan-cli`](https://github.com/TeamQQ/netriskscan-cli), wraps the same API for the terminal:
+  ```bash
+  npx netriskscan-cli check 8.8.8.8
+  ```
+- **Website / Developer API** — [netriskscan.com](https://www.netriskscan.com/)
+- **GitHub** — [github.com/TeamQQ](https://github.com/TeamQQ)
 
-```bash
-npx netriskscan-cli check 8.8.8.8
+<!-- A Python SDK is in development. Once it is published to PyPI, add it here as:
+- **Python SDK** — [`netriskscan`](https://pypi.org/project/netriskscan/) on PyPI ([source](https://github.com/TeamQQ/netriskscan-sdk-python))
+  ```bash
+  pip install netriskscan
+  ```
+-->
+
+Get an API key from the [NetRiskScan developer console](https://www.netriskscan.com/developer/register) — anonymous access works without one, see [Anonymous access](#anonymous-access-no-api-key) above.
+
+## FAQ
+
+#### How do I check IP reputation in JavaScript?
+
+Call `checkIp()` and read `result.risk` and `result.flags`:
+
+```ts
+const result = await client.checkIp("8.8.8.8");
+console.log(result.risk.index, result.risk.band, result.flags);
 ```
+
+#### How do I look up an IP address in Node.js or TypeScript?
+
+The same `checkIp()` call works unchanged in Node.js and TypeScript — the SDK ships its own types, so
+no `@types/*` package is needed.
+
+#### How do I detect a proxy IP address in JavaScript?
+
+Read `result.flags.proxy` (and `result.flags.proxyType` when it's `true`) — see
+[Proxy, VPN, and Tor detection](#proxy-vpn-and-tor-detection).
+
+#### How do I detect VPN users in Node.js?
+
+Read `result.flags.vpn`. It is three-valued: `true` (detected), `false` (checked, not detected), or
+`null` (unknown) — never collapse `null` into `false`.
+
+#### Can JavaScript detect Tor exit nodes?
+
+Yes — `result.flags.tor` reports Tor infrastructure (including exit nodes) as detected by the
+NetRiskScan API; the detection itself runs server-side, not in the SDK.
+
+#### How do I detect datacenter IP addresses?
+
+Read `result.flags.datacenter` — see
+[Datacenter and network intelligence](#datacenter-and-network-intelligence).
+
+#### Can I use NetRiskScan in Cloudflare Workers, Bun, or Deno?
+
+Yes. The SDK has zero runtime dependencies and is built entirely on `fetch`, so it runs in any of
+those runtimes alongside Node.js 20+ — see [Supported Runtimes](#supported-runtimes).
 
 ## Contributing
 
