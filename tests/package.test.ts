@@ -27,7 +27,49 @@ describe("package integrity", () => {
   });
 
   it("points package users to the official website", () => {
-    expect(packageJson.homepage).toBe("https://www.netriskscan.com/");
+    const homepage = new URL(packageJson.homepage ?? "");
+
+    expect(homepage.origin).toBe("https://www.netriskscan.com");
+    expect(homepage.pathname).toBe("/");
+  });
+
+  // npm's package page evidently sends no usable Referer when its "Homepage" link is followed, so the UTM tags are the ONLY
+  // way NetRiskScan can tell this traffic came from npm. Without them the visit is recorded as "direct".
+  it("tags the npm homepage link so the visit is attributed to npm", () => {
+    const { searchParams } = new URL(packageJson.homepage ?? "");
+
+    expect(Object.fromEntries(searchParams)).toEqual({
+      utm_source: "npm",
+      utm_medium: "referral",
+      utm_campaign: "sdk-js",
+      utm_content: "package-homepage",
+    });
+  });
+});
+
+describe("README website links", () => {
+  const readme = readFileSync(fileURLToPath(new URL("../README.md", import.meta.url)), "utf8");
+  // Links to the website itself. api.netriskscan.com is the API host, not a page a visitor lands on.
+  const websiteLinks = [
+    ...readme.matchAll(/\]\((https:\/\/(?:www\.)?netriskscan\.com[^)]*)\)/g),
+  ].map((match) => match[1]!);
+
+  it("has at least one link to the website", () => {
+    expect(websiteLinks.length).toBeGreaterThan(0);
+  });
+
+  // Kept apart from the npm homepage's tags: the README is what GitHub visitors read, and mixing the two
+  // would make the two channels impossible to tell apart in NetRiskScan's traffic analytics.
+  it("tags every website link as GitHub README traffic, distinct from the npm homepage", () => {
+    for (const link of websiteLinks) {
+      expect(Object.fromEntries(new URL(link).searchParams)).toEqual({
+        utm_source: "github",
+        utm_medium: "referral",
+        utm_campaign: "sdk-js",
+        utm_content: "readme",
+      });
+    }
+    expect(websiteLinks).not.toContain(packageJson.homepage);
   });
 });
 

@@ -32,7 +32,7 @@
     "sdk",
     "typescript"
   ],
-  "homepage": "https://www.netriskscan.com/",
+  "homepage": "https://www.netriskscan.com/?utm_source=npm&utm_medium=referral&utm_campaign=sdk-js&utm_content=package-homepage",
   "bugs": "https://github.com/TeamQQ/netriskscan-sdk-js/issues",
   "repository": {
     "type": "git",

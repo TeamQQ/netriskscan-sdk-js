@@ -1,6 +1,6 @@
 # NetRiskScan SDK for JavaScript
 
-Official JavaScript and TypeScript SDK for the [NetRiskScan](https://www.netriskscan.com/) API — IP
+Official JavaScript and TypeScript SDK for the [NetRiskScan](https://www.netriskscan.com/?utm_source=github&utm_medium=referral&utm_campaign=sdk-js&utm_content=readme) API — IP
 lookup, IP risk scoring, IP reputation, and proxy/VPN/Tor/datacenter detection, plus network
 intelligence (ASN, organization, network-level location) for any IPv4 or IPv6 address. Works from
 Node.js, Bun, Deno, and Cloudflare Workers — anonymous access included, no signup required to try it.
@@ -85,7 +85,7 @@ for (const reason of result.risk.reasons ?? []) {
 
 ## Authentication
 
-Create an API key in the [NetRiskScan developer console](https://netriskscan.com). Keys look like
+Create an API key in the [NetRiskScan developer console](https://www.netriskscan.com/?utm_source=github&utm_medium=referral&utm_campaign=sdk-js&utm_content=readme). Keys look like
 `nrs_live_…`, and are shown **in full exactly once** — store yours immediately, because the server
 keeps only a hash and cannot recover it for you.
 
@@ -678,7 +678,7 @@ transports and types the published result, and computes nothing locally.
   ```bash
   npx netriskscan-cli check 8.8.8.8
   ```
-- **Website / Developer API** — [netriskscan.com](https://www.netriskscan.com/)
+- **Website / Developer API** — [netriskscan.com](https://www.netriskscan.com/?utm_source=github&utm_medium=referral&utm_campaign=sdk-js&utm_content=readme)
 - **GitHub** — [github.com/TeamQQ](https://github.com/TeamQQ)
 
 <!-- A Python SDK is in development. Once it is published to PyPI, add it here as:
@@ -688,7 +688,7 @@ transports and types the published result, and computes nothing locally.
   ```
 -->
 
-Get an API key from the [NetRiskScan developer console](https://www.netriskscan.com/developer/register) — anonymous access works without one, see [Anonymous access](#anonymous-access-no-api-key) above.
+Get an API key from the [NetRiskScan developer console](https://www.netriskscan.com/developer/register?utm_source=github&utm_medium=referral&utm_campaign=sdk-js&utm_content=readme) — anonymous access works without one, see [Anonymous access](#anonymous-access-no-api-key) above.
 
 ## FAQ
 
