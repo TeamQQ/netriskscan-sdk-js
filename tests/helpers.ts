@@ -225,3 +225,28 @@ export const USAGE_BODY = {
 export function errorBody(code: string, message: string, requestId = "req_error0000") {
   return { error: { code, message, requestId } };
 }
+
+/** Schema 1.6.0 anycast response: coordinates and postal code are intentionally unknown. */
+export const IP_INTELLIGENCE_BODY = {
+  ...IP_RISK_BODY,
+  network: { ...IP_RISK_BODY.network, domain: "google.com", range: "8.8.8.0/24" },
+  location: {
+    ...IP_RISK_BODY.location,
+    continentCode: "NA",
+    continent: "North America",
+    postalCode: null,
+    latitude: null,
+    longitude: null,
+  },
+} as const;
+
+/** Synthetic non-anycast location for testing numeric coordinates and postal-code preservation. */
+export const LOCATED_IP_INTELLIGENCE_BODY = {
+  ...IP_INTELLIGENCE_BODY,
+  location: {
+    ...IP_INTELLIGENCE_BODY.location,
+    postalCode: "00501",
+    latitude: 40.81,
+    longitude: -73.04,
+  },
+} as const;

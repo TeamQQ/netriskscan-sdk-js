@@ -10,6 +10,16 @@ releases may contain breaking changes.
 
 ### Added
 
+- API Schema 1.6.0: optional, nullable `IpNetwork.domain` and `IpNetwork.range`, plus
+  `IpLocation.continentCode`, `continent`, `postalCode`, `latitude`, and `longitude`. Existing fields
+  and older API responses remain compatible; omitted fields, explicit nulls, and zero coordinates
+  retain their distinct meanings. No runtime dependencies or request behavior changes.
+- Mock-fetch coverage for populated/null/omitted intelligence fields, zero coordinates, anycast,
+  partial locations, IPv6 CIDR, postal leading zeros, unknown future fields, and batch ordering with
+  isolated failures. Compile-time tests cover public types and invalid assignments.
+- Schema 1.6.0 usage example and field semantics. Package versioning remains managed by
+  semantic-release and the existing build-time version synchronization.
+
 - `IpRiskResult.location` (`IpLocation`) - network-level GeoIP intelligence for the queried address:
   country, region, city, and time zone. Optional and nullable to stay backward-compatible with API
   servers that do not yet publish it - `undefined` means the server hasn't shipped the field,

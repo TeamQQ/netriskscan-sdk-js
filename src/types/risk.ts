@@ -200,6 +200,20 @@ export interface IpNetwork {
   asn: string | null;
   /** Canonical operator of the network / ASN, e.g. `Google LLC`. */
   organization: string | null;
+  /**
+   * Verified registrable domain of the network operator.
+   *
+   * Not the hosted website, cloud customer domain, reverse DNS hostname, or an inferred domain.
+   * Undefined on older API servers. Null when no trustworthy domain mapping exists.
+   */
+  domain?: string | null;
+  /**
+   * Canonical IPv4 or IPv6 CIDR range containing the queried IP address.
+   *
+   * Undefined on older API servers. Null when a reliable containing prefix is unavailable.
+   * The SDK preserves the server's prefix without calculating or validating containment.
+   */
+  range?: string | null;
 }
 
 /**
@@ -282,6 +296,16 @@ export interface IpLocation {
   city: string | null;
   /** IANA time-zone identifier, e.g. `"America/Los_Angeles"`. */
   timeZone: string | null;
+  /** Continent code according to the API's UN geographic classification. */
+  continentCode?: string | null;
+  /** English continent name supplied by the server. */
+  continent?: string | null;
+  /** Postal code exactly as supplied by the server. Keep leading zeros. */
+  postalCode?: string | null;
+  /** Approximate network latitude, not device GPS. Valid range: -90 to 90. */
+  latitude?: number | null;
+  /** Approximate network longitude, not device GPS. Valid range: -180 to 180. */
+  longitude?: number | null;
 }
 
 /** How a request was authenticated. Open vocabulary - render the string, do not hard-code a whitelist. */
