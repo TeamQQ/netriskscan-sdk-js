@@ -11,6 +11,8 @@ import {
   ANONYMOUS_IP_RISK_BODY,
   GOOGLEBOT_BODY,
   IP_RISK_BODY,
+  IP_INTELLIGENCE_BODY,
+  LOCATED_IP_INTELLIGENCE_BODY,
   LEGACY_IP_RISK_BODY,
   RESIDENTIAL_PROXY_BODY,
   TEST_API_KEY,
@@ -22,6 +24,170 @@ import {
 function client(fetch: ReturnType<typeof stubFetch>["fetch"], options = {}) {
   return new NetRiskScanClient({ apiKey: TEST_API_KEY, fetch, retries: 0, ...options });
 }
+
+describe("Schema 1.6.0 IP intelligence", () => {
+  it("preserves all seven populated fields, postal leading zeros, and future fields", async () => {
+    const body = {
+      ...LOCATED_IP_INTELLIGENCE_BODY,
+      futureTopLevel: { value: 0 },
+      network: { ...LOCATED_IP_INTELLIGENCE_BODY.network, futureNetwork: "unchanged" },
+      location: { ...LOCATED_IP_INTELLIGENCE_BODY.location, futureLocation: false },
+    };
+    const stub = stubFetch({ body });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+    expect(result).toEqual(body);
+    expect(result.network.domain).toBe("google.com");
+    expect(result.network.range).toBe("8.8.8.0/24");
+    expect(result.location?.continentCode).toBe("NA");
+    expect(result.location?.continent).toBe("North America");
+    expect(result.location?.postalCode).toBe("00501");
+    expect(result.location?.latitude).toBe(40.81);
+    expect(result.location?.longitude).toBe(-73.04);
+    expect(JSON.parse(JSON.stringify(result))).toEqual(body);
+    expect(stub.calls).toHaveLength(1);
+  });
+
+  it("preserves explicit null for every new field", async () => {
+    const body = {
+      ...IP_RISK_BODY,
+      network: { ...IP_RISK_BODY.network, domain: null, range: null },
+      location: {
+        ...IP_RISK_BODY.location,
+        continentCode: null,
+        continent: null,
+        postalCode: null,
+        latitude: null,
+        longitude: null,
+      },
+    };
+    const stub = stubFetch({ body });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+    expect(result).toEqual(body);
+    expect(result.network.domain).toBeNull();
+    expect(result.network.range).toBeNull();
+    for (const field of [
+      "continentCode",
+      "continent",
+      "postalCode",
+      "latitude",
+      "longitude",
+    ] as const) {
+      expect(result.location?.[field]).toBeNull();
+    }
+  });
+
+  it("keeps fields absent on older servers without adding defaults", async () => {
+    const stub = stubFetch({ body: IP_RISK_BODY });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+    expect(result).toEqual(IP_RISK_BODY);
+    for (const field of ["domain", "range"] as const) {
+      expect(result.network[field]).toBeUndefined();
+      expect(result.network).not.toHaveProperty(field);
+    }
+    for (const field of [
+      "continentCode",
+      "continent",
+      "postalCode",
+      "latitude",
+      "longitude",
+    ] as const) {
+      expect(result.location?.[field]).toBeUndefined();
+      expect(result.location).not.toHaveProperty(field);
+    }
+  });
+
+  it("preserves zero coordinates and a zero risk index", async () => {
+    const body = {
+      ...LOCATED_IP_INTELLIGENCE_BODY,
+      risk: { ...IP_RISK_BODY.risk, index: 0, band: "high_risk" },
+      location: { ...LOCATED_IP_INTELLIGENCE_BODY.location, latitude: 0, longitude: 0 },
+    };
+    const stub = stubFetch({ body });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+    expect(result.location?.latitude).toBe(0);
+    expect(result.location?.longitude).toBe(0);
+    expect(result.risk.index).toBe(0);
+  });
+
+  it("does not infer missing location data or complete an incomplete coordinate pair", async () => {
+    const body = {
+      ...IP_INTELLIGENCE_BODY,
+      location: {
+        ...IP_RISK_BODY.location,
+        continentCode: "NA",
+        continent: "North America",
+        latitude: 0,
+      },
+    };
+    const stub = stubFetch({ body });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+    expect(result).toEqual(body);
+    expect(result.location?.longitude).toBeUndefined();
+    expect(result.location).not.toHaveProperty("longitude");
+    expect(result.location).not.toHaveProperty("postalCode");
+  });
+
+  it("preserves null anycast coordinates", async () => {
+    const stub = stubFetch({ body: IP_INTELLIGENCE_BODY });
+    const result = await client(stub.fetch).checkIp("8.8.8.8");
+    expect(result.location?.latitude).toBeNull();
+    expect(result.location?.longitude).toBeNull();
+  });
+
+  it("preserves the server's IPv6 CIDR string", async () => {
+    const body = {
+      ...IP_INTELLIGENCE_BODY,
+      network: { ...IP_INTELLIGENCE_BODY.network, range: "2001:4860:4860::/48" },
+    };
+    const stub = stubFetch({ body });
+    const result = await client(stub.fetch).checkIp("2001:4860:4860::8888");
+    expect(result.network.range).toBe(body.network.range);
+    expect(result).toEqual(body);
+  });
+
+  it("keeps batch payloads and input order when requests finish out of order and one fails", async () => {
+    const first = LOCATED_IP_INTELLIGENCE_BODY;
+    const last = {
+      ...LOCATED_IP_INTELLIGENCE_BODY,
+      network: { ...IP_INTELLIGENCE_BODY.network, domain: "cloudflare.com", range: "1.1.1.0/24" },
+      location: { ...LOCATED_IP_INTELLIGENCE_BODY.location, latitude: 0, longitude: 0 },
+    };
+    let releaseFirst: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const calls: string[] = [];
+    const completed: string[] = [];
+    const instance = client(async (url) => {
+      calls.push(url);
+      if (url.endsWith("8.8.8.8")) await gate;
+      if (url.endsWith("1.1.1.1")) releaseFirst?.();
+      completed.push(url);
+      return new Response(
+        JSON.stringify(
+          url.endsWith("9.9.9.9")
+            ? errorBody("not_found", "Not found")
+            : url.endsWith("8.8.8.8")
+              ? first
+              : last,
+        ),
+        {
+          status: url.endsWith("9.9.9.9") ? 404 : 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    });
+    const ips = ["8.8.8.8", "9.9.9.9", "1.1.1.1"];
+    const results = await instance.checkMany(ips, { concurrency: 3 });
+    expect(results.map((entry) => entry.ip)).toEqual(ips);
+    expect(results[0]).toEqual({ ip: ips[0], ok: true, data: first });
+    expect(results[1]).toMatchObject({ ip: ips[1], ok: false, error: { status: 404 } });
+    expect(results[2]).toEqual({ ip: ips[2], ok: true, data: last });
+    expect(completed[0]).not.toBe(calls[0]);
+    expect(calls).toHaveLength(3);
+    expect(new Set(calls).size).toBe(3);
+  });
+});
 
 describe("NetRiskScanClient construction", () => {
   it("allows apiKey to be omitted entirely, for the anonymous tier", () => {

@@ -568,6 +568,48 @@ server failure. That keeps the three failure modes cleanly apart:
 
 A signal passed to `checkMany()` cancels every request still in flight.
 
+## IP Intelligence Schema 1.6.0
+
+```ts
+import { NetRiskScanClient } from "@netriskscan/sdk";
+
+const client = new NetRiskScanClient();
+const result = await client.checkIp("8.8.8.8");
+
+console.log("IP Risk Index:", result.risk.index);
+console.log("Domain:", result.network.domain);
+console.log("Range:", result.network.range);
+
+if (result.location) {
+  console.log("Continent Code:", result.location.continentCode);
+  console.log("Continent:", result.location.continent);
+  console.log("Postal Code:", result.location.postalCode);
+
+  const { latitude, longitude } = result.location;
+  if (typeof latitude === "number" && typeof longitude === "number") {
+    console.log("Coordinates:", latitude, longitude);
+  }
+}
+```
+
+- `network.domain` is the verified registrable domain of the network operator, such as `google.com`.
+  It is not a hosted website, cloud customer's domain, PTR hostname, or a guess from the organization.
+- `network.range` is the canonical IPv4 or IPv6 CIDR prefix containing the queried address. The SDK
+  passes it through without calculating or validating network membership.
+- `location.continentCode` and `location.continent` use the API's UN geographic classification; the
+  continent name is English. `postalCode` stays a string, preserving leading zeros such as `"00501"`.
+- Latitude and longitude are approximate network coordinates, not device GPS. Latitude ranges from
+  -90 to 90 and longitude from -180 to 180. The server publishes them as a pair; anycast addresses may
+  have `null` coordinates because there is no reliable single location.
+- All seven fields are optional and nullable: `undefined` means the server omitted the field (for
+  example, an older API), while `null` means it supplied the field but could not reliably determine
+  its value. Numeric `0` is a valid coordinate; use the numeric checks above, not truthiness or
+  `value || null`.
+
+The SDK preserves the response exactly, including partial location data and unknown future fields.
+It never infers domains, fills in missing geolocation, or completes missing coordinate pairs.
+Schema 1.6.0 is the API contract version, independent of the npm package version.
+
 ## TypeScript
 
 Types are generated from the source and ship with the package — no `@types/*` needed.
@@ -584,6 +626,7 @@ import type {
   DetectionFlag,
   ResponseMeta,
   IpLocation,
+  IpNetwork,
   RiskReason,
   RiskReasonCode,
   RiskReasonCategory,

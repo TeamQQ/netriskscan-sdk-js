@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import * as sdk from "../src/index.js";
-import type { IpLocation, IpRiskResult, RiskReason } from "../src/index.js";
+import type { IpLocation, IpNetwork, IpRiskResult, RiskReason } from "../src/index.js";
 
 const packageJson = JSON.parse(
   readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
@@ -12,6 +12,89 @@ const packageJson = JSON.parse(
   dependencies?: Record<string, string>;
   private?: boolean;
 };
+
+describe("Schema 1.6.0 public types", () => {
+  it("accepts populated, null, and omitted fields through the public root", () => {
+    const oldNetwork: IpNetwork = {
+      type: null,
+      connectionType: null,
+      asn: null,
+      organization: null,
+    };
+    const oldLocation: IpLocation = {
+      countryCode: "US",
+      country: "United States",
+      regionCode: null,
+      region: null,
+      city: null,
+      timeZone: null,
+    };
+    const network: IpNetwork = { ...oldNetwork, domain: "google.com", range: "8.8.8.0/24" };
+    const location: IpLocation = {
+      ...oldLocation,
+      continentCode: "NA",
+      continent: "North America",
+      postalCode: "00501",
+      latitude: 0,
+      longitude: -73.04,
+    };
+    const nullNetwork: IpNetwork = { ...oldNetwork, domain: null, range: null };
+    const nullLocation: IpLocation = {
+      ...oldLocation,
+      continentCode: null,
+      continent: null,
+      postalCode: null,
+      latitude: null,
+      longitude: null,
+    };
+    expectTypeOf<IpNetwork["domain" | "range"]>().toEqualTypeOf<string | null | undefined>();
+    expectTypeOf<IpLocation["continentCode" | "continent" | "postalCode"]>().toEqualTypeOf<
+      string | null | undefined
+    >();
+    expectTypeOf<IpLocation["latitude" | "longitude"]>().toEqualTypeOf<number | null | undefined>();
+    expectTypeOf<IpRiskResult["network"]>().toEqualTypeOf<IpNetwork>();
+    expectTypeOf<IpRiskResult["location"]>().toEqualTypeOf<IpLocation | null | undefined>();
+    expect(network.domain).toBe("google.com");
+    expect(location.postalCode).toBe("00501");
+    expect(oldNetwork.domain).toBeUndefined();
+    expect(oldLocation.latitude).toBeUndefined();
+    expect(nullNetwork.domain).toBeNull();
+    expect(nullLocation.latitude).toBeNull();
+  });
+
+  it("rejects wrong value types and explicit undefined under exactOptionalPropertyTypes", () => {
+    // These negative assertions are checked by tsc, not just Vitest's runtime transpilation.
+    // @ts-expect-error - domain is a nullable string.
+    const domain: Pick<IpNetwork, "domain"> = { domain: 123 };
+    // @ts-expect-error - range is a nullable string.
+    const range: Pick<IpNetwork, "range"> = { range: 123 };
+    // @ts-expect-error - continentCode is a nullable string.
+    const continentCode: Pick<IpLocation, "continentCode"> = { continentCode: 123 };
+    // @ts-expect-error - continent is a nullable string.
+    const continent: Pick<IpLocation, "continent"> = { continent: 123 };
+    // @ts-expect-error - postal codes must retain their string representation.
+    const postalCode: Pick<IpLocation, "postalCode"> = { postalCode: 501 };
+    // @ts-expect-error - latitude is numeric, never a numeric string.
+    const latitude: Pick<IpLocation, "latitude"> = { latitude: "0" };
+    // @ts-expect-error - longitude is numeric, never a numeric string.
+    const longitude: Pick<IpLocation, "longitude"> = { longitude: "0" };
+    // @ts-expect-error - an omitted property differs from a present undefined value.
+    const undefinedDomain: Pick<IpNetwork, "domain"> = { domain: undefined };
+    // @ts-expect-error - an omitted property differs from a present undefined value.
+    const undefinedLatitude: Pick<IpLocation, "latitude"> = { latitude: undefined };
+    expect([
+      domain,
+      range,
+      continentCode,
+      continent,
+      postalCode,
+      latitude,
+      longitude,
+      undefinedDomain,
+      undefinedLatitude,
+    ]).toHaveLength(9);
+  });
+});
 
 describe("package integrity", () => {
   it("keeps the inlined VERSION in step with package.json", () => {
